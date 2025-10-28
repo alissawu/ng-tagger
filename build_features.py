@@ -121,7 +121,6 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
         f"hasHyphen={'true' if '-' in w else 'false'}",
         f"hasDigit={'true' if has_digit(w) else 'false'}",
         f"isNumber={'true' if is_number(w) else 'false'}",
-        f"isPunct={'true' if is_punct(w) else 'false'}",
         f"isDet={'true' if wl in DET_WORDS else 'false'}",
         f"isPrep={'true' if wl in PREP_WORDS else 'false'}",
     ]
