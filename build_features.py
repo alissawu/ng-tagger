@@ -147,7 +147,6 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     if n1 is not None:
         nw, npos, _ = n1
         feats.append(f"n1w={nw}")
-        feats.append(f"n1wl={nw.lower()}")
         feats.append(f"n1pos={npos}")
         feats.append(f"n1cpos={coarse_pos(npos)}")
 
@@ -159,7 +158,7 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     if n2 is not None:
         _, n2pos, _ = n2
         feats.append(f"n2pos={n2pos}")
-        feats.append(f"n2cpos={coarse_pos(n2pos)}")
+        
 
     # POS n-grams (compact, high impact)
     if p1 is not None:
