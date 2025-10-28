@@ -114,11 +114,8 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
         f"pos={pos}",
         f"cpos={coarse_pos(pos)}",
         f"shape={word_shape(w)}",
-        f"pre2={pre(w,2)}",
-        f"pre3={pre(w,3)}",
         f"suf2={suf(w,2)}",
         f"suf3={suf(w,3)}",
-        f"suf4={suf(w,4)}",
         f"isTitle={'true' if (w[:1].isupper() and wl[1:]!=wl[1:].upper()) else 'false'}",
         f"isAllCaps={'true' if w.isupper() and any(c.isalpha() for c in w) else 'false'}",
         f"hasHyphen={'true' if '-' in w else 'false'}",
@@ -182,14 +179,6 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     # Proper-noun runs (common NP)
     if (pos == "NNP" and ((p1 is not None and p1[1] == "NNP") or (n1 is not None and n1[1] == "NNP"))):
         feats.append("pnRun=true")
-
-    # Comma between nouny tokens (NP appositives, enumerations)
-    # Detect pattern: nouny , nouny around current position
-    if p1 is not None and n1 is not None:
-        if p1[0] == "," and nouny(n1[1]) and nouny(p2[1]) if p2 is not None else False:
-            feats.append("commaBetweenNP=true")
-        if n1[0] == "," and nouny(p1[1]) and nouny(n2[1]) if n2 is not None else False:
-            feats.append("commaBetweenNP=true")
 
     # Sequence dependency hooks (MEMM style)
     if include_prev_bio:
