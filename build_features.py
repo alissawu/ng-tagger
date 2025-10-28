@@ -186,6 +186,27 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
             feats.append(f"PrevBIO+p1pos=@@+{p1[1]}")
         feats.append(f"PrevBIO+pos=@@+{pos}")
 
+    # ===== COORDINATION FEATURES (for 'and' error reduction) =====
+
+    # Proper noun coordination (NNP and NNP pattern - strong O signal)
+    if (p1 is not None and n1 is not None and
+        p1[1].startswith('NNP') and n1[1].startswith('NNP')):
+        feats.append("nnp_and_nnp")
+
+    # Adjective coordination before noun (JJ and JJ N - phrase-level coordination)
+    if (p1 is not None and n1 is not None and n2 is not None and
+        p1[1].startswith('JJ') and n1[1].startswith('JJ') and n2[1].startswith('NN')):
+        feats.append("adj_coord_before_n")
+
+    # Quantifier in previous 3 tokens (scope indicator for list NPs)
+    has_quant = False
+    for j in range(max(0, i-3), i):
+        if sent[j][1] in {'CD', 'DT', 'PRP$'}:
+            has_quant = True
+            break
+    if has_quant:
+        feats.append("quant_in_prev3")
+
     return feats
 
 def write_features(sents, out_path: Path, is_training: bool):
