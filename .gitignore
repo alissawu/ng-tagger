@@ -1,0 +1,11 @@
+# Ignore training and model artifacts
+*.events
+*.chunk
+*.feature
+
+# Other generated or unnecessary files
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+.env/

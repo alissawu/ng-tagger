@@ -1,0 +1,89 @@
+#!/bin/bash
+# Parallel feature ablation testing for Category 4 & 5
+
+set -e
+
+echo "==================================================================="
+echo "Starting Parallel Feature Ablation Tests"
+echo "==================================================================="
+echo ""
+
+# Clean up old experiments
+rm -rf exp1 exp2 exp3 exp4 exp5 2>/dev/null || true
+
+# Function to run one experiment
+run_experiment() {
+    local exp_num=$1
+    local feature_pattern=$2
+    local exp_name=$3
+
+    echo "[$exp_name] Starting..."
+
+    # Create experiment directory
+    mkdir -p exp${exp_num}
+
+    # Create modified build_features.py by removing the line with the feature
+    grep -v "${feature_pattern}" build_features.py > exp${exp_num}/build_features_mod.py
+
+    # Build features
+    python3 exp${exp_num}/build_features_mod.py train WSJ_02-21.pos-chunk exp${exp_num}/training.feature > /dev/null 2>&1
+    python3 exp${exp_num}/build_features_mod.py dev WSJ_24.pos exp${exp_num}/test.feature > /dev/null 2>&1
+
+    # Train model (8GB instead of 16GB to avoid crashes)
+    java -Xmx8g -cp .:maxent-3.0.0.jar:trove.jar MEtrain exp${exp_num}/training.feature exp${exp_num}/model.chunk > /dev/null 2>&1
+
+    # Tag
+    java -Xmx8g -cp .:maxent-3.0.0.jar:trove.jar MEtag exp${exp_num}/test.feature exp${exp_num}/model.chunk exp${exp_num}/response.chunk > /dev/null 2>&1
+
+    # Score
+    python3 score.chunk.py WSJ_24.pos-chunk exp${exp_num}/response.chunk > exp${exp_num}/results.txt 2>&1
+
+    echo "[$exp_name] Complete!"
+}
+
+# Run in 2 batches to reduce memory pressure (3 then 2)
+echo "Batch 1: Running experiments 1-3..."
+run_experiment 1 'p2pos+p1pos={p2\[1\]}+{p1\[1\]}' "Remove p2pos+p1pos" &
+run_experiment 2 'n1pos+n2pos={n1\[1\]}+{n2\[1\]}' "Remove n1pos+n2pos" &
+run_experiment 3 'p2pos+p1pos+pos={p2\[1\]}+{p1\[1\]}+{pos}' "Remove p2pos+p1pos+pos" &
+wait
+
+echo "Batch 2: Running experiments 4-5..."
+run_experiment 4 'pos+n1pos+n2pos={pos}+{n1\[1\]}+{n2\[1\]}' "Remove pos+n1pos+n2pos" &
+run_experiment 5 'feats.append("BOS2")' "Remove BOS2" &
+wait
+
+echo ""
+echo "==================================================================="
+echo "ALL EXPERIMENTS COMPLETE - RESULTS SUMMARY"
+echo "==================================================================="
+echo ""
+
+# Parse and display results
+print_result() {
+    local exp_num=$1
+    local exp_name=$2
+    local results_file="exp${exp_num}/results.txt"
+
+    if [ -f "$results_file" ]; then
+        local accuracy=$(grep "accuracy:" $results_file | awk '{print $2}')
+        local precision=$(grep "precision:" $results_file | awk '{print $2}')
+        local recall=$(grep "recall:" $results_file | awk '{print $2}')
+        local f1=$(grep "F1:" $results_file | awk '{print $2}')
+        local correct=$(grep "correct groups" $results_file | awk '{print $1}')
+
+        printf "%-30s  Acc: %-6s  P: %-6s  R: %-6s  F1: %-6s  Correct: %s\n" "$exp_name" "$accuracy" "$precision" "$recall" "$f1" "$correct"
+    else
+        printf "%-30s  ERROR: Results not found\n" "$exp_name"
+    fi
+}
+
+print_result 1 "Remove p2pos+p1pos"
+print_result 2 "Remove n1pos+n2pos"
+print_result 3 "Remove p2pos+p1pos+pos"
+print_result 4 "Remove pos+n1pos+n2pos"
+print_result 5 "Remove BOS2"
+
+echo ""
+echo "Detailed results in: exp1/results.txt, exp2/results.txt, etc."
+echo "==================================================================="
