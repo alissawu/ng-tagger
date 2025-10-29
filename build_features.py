@@ -137,6 +137,14 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     if n1 is None: feats.append("EOS")
     if n2 is None: feats.append("EOS2")
 
+    # ===== FEATURE 2: QUOTATION BOUNDARIES ===== # NEW_F2
+    # Opening quote → B-NP signal for following token # NEW_F2
+    if p1 is not None and p1[0] in {'``', '"', '`'}: # NEW_F2
+        feats.append("after_open_quote") # NEW_F2
+    # Quote before noun # NEW_F2
+    if pos in {'``', '"', '`'} and n1 is not None and n1[1].startswith('NN'): # NEW_F2
+        feats.append("quote_before_nn") # NEW_F2
+
     # Neighbor word (±1) light identity
     if p1 is not None:
         pw, ppos, _ = p1
@@ -186,7 +194,17 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
             feats.append(f"PrevBIO+p1pos=@@+{p1[1]}")
         feats.append(f"PrevBIO+pos=@@+{pos}")
 
+    # ===== FEATURE 3: "THAT" COMPLEMENTIZER ===== # NEW_F3
+    # "that" (IN) as complementizer → following token likely B-NP # NEW_F3
+    if p1 is not None and p1[0].lower() == 'that' and p1[1] == 'IN': # NEW_F3
+        feats.append("after_that_comp") # NEW_F3
+
     # ===== COORDINATION FEATURES (for 'and' error reduction) =====
+
+    # ===== FEATURE 1: COORDINATION AFTER PUNCTUATION ===== # NEW_F1
+    # Coordination after comma/semicolon (list coordination → strong O signal) # NEW_F1
+    if wl in {'and', 'or', '&'} and p1 is not None and p1[0] in {',', ';'}: # NEW_F1
+        feats.append("coord_after_punct") # NEW_F1
 
     # Proper noun coordination (NNP and NNP pattern - strong O signal)
     if (p1 is not None and n1 is not None and
@@ -206,6 +224,61 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
             break
     if has_quant:
         feats.append("quant_in_prev3")
+
+    # ===== NEW CC/COORDINATION FEATURES (targeting 51 B→I errors after CC) ===== # CC_FEATS
+
+    # CC_F1: Noun after CC at phrase boundary (punct/verb follows) # CC_F1
+    if pos in {'NN', 'NNS', 'NNP', 'NNPS'}: # CC_F1
+        if p1 is not None and p1[0].lower() in {'and', 'or', '&'}: # CC_F1
+            if n1 is not None and n1[1] in {'.', ',', ';', ':', 'VBD', 'VBZ', 'VBP', 'VBN', 'MD', 'IN'}: # CC_F1
+                feats.append("noun_after_cc_at_boundary")  # Strong B-NP signal # CC_F1
+
+    # CC_F2: List coordination - comma in context + after CC # CC_F2
+    if p1 is not None and p1[0].lower() in {'and', 'or'}: # CC_F2
+        has_prev_comma = False # CC_F2
+        for j in range(max(0, i-5), i): # CC_F2
+            if sent[j][0] == ',': # CC_F2
+                has_prev_comma = True # CC_F2
+                break # CC_F2
+        if has_prev_comma and pos in {'NN', 'NNS', 'NNP', 'NNPS'}: # CC_F2
+            feats.append("list_coord_after_comma")  # B-NP signal # CC_F2
+
+    # CC_F3: Distinguish phrase-level vs sentence-level coordination # CC_F3
+    if wl in {'and', 'or', '&'}: # CC_F3
+        if p1 is not None and n1 is not None: # CC_F3
+            p_is_noun = p1[1] in {'NN', 'NNS', 'NNP', 'NNPS', 'JJ', 'CD'} # CC_F3
+            n_is_noun = n1[1] in {'NN', 'NNS', 'NNP', 'NNPS'} # CC_F3
+            if p_is_noun and n_is_noun: # CC_F3
+                # Check what follows the noun after CC # CC_F3
+                if n2 is not None: # CC_F3
+                    n2_is_noun = n2[1] in {'NN', 'NNS', 'NNP', 'NNPS'} # CC_F3
+                    if n2_is_noun: # CC_F3
+                        feats.append("cc_phrase_level")  # I-NP ok (e.g., "red and blue cars") # CC_F3
+                    else: # CC_F3
+                        feats.append("cc_sentence_level")  # O signal (e.g., "housing and inflation .") # CC_F3
+                else: # CC_F3
+                    feats.append("cc_sentence_level")  # End of sentence # CC_F3
+
+    # CC_F4: Simple - noun after CC gets B-NP boost # CC_F4
+    if p1 is not None and p1[1] == 'CC' and pos in {'NN', 'NNS', 'NNP', 'NNPS'}: # CC_F4
+        feats.append("noun_after_cc")  # General B-NP signal # CC_F4
+
+    # ===== FEATURE 4: COMMA CONTEXT IN NNP SEQUENCES ===== # NEW_F4
+    # Distinguish list commas (I-NP) from appositive commas (O) # NEW_F4
+    if pos == ',': # NEW_F4
+        if p1 is not None and n1 is not None: # NEW_F4
+            # NNP , NNP pattern - check if it's a long list # NEW_F4
+            if p1[1] == 'NNP' and n1[1] == 'NNP': # NEW_F4
+                # Count NNPs in context window (±3) # NEW_F4
+                nnp_count = 0 # NEW_F4
+                for j in range(max(0, i-3), min(len(sent), i+4)): # NEW_F4
+                    if j != i and sent[j][1] == 'NNP': # NEW_F4
+                        nnp_count += 1 # NEW_F4
+                if nnp_count >= 3: # NEW_F4
+                    feats.append("comma_in_nnp_list")  # Long list → I-NP # NEW_F4
+            # Appositive detection: NNP , (WP|WDT|VB|RB|IN) # NEW_F4
+            elif p1[1] == 'NNP' and n1[1] in {'WP', 'WDT', 'WRB', 'VBD', 'VBZ', 'VBP', 'RB', 'IN'}: # NEW_F4
+                feats.append("comma_appositive")  # Appositive → O # NEW_F4
 
     # ===== LINGUISTIC FEATURES (winners from ablation testing) =====
 
