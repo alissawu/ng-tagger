@@ -37,9 +37,14 @@ Features (curated, high-yield)
   - Proper-noun run: `pnRun=true` if NNP next to NNP
   - Comma between nouns: `commaBetweenNP=true` if `,` with NN on both sides
 - Coordination features (for 'and' error reduction)
-  - `nnp_and_nnp=true` if both neighbors are proper nouns (entity coordination signal)
-  - `adj_coord_before_n=true` if pattern is JJ and JJ N (phrase-level coordination)
-  - `quant_in_prev3=true` if quantifier (CD/DT/PRP$) in previous 3 tokens (list scope)
+  - `nnp_and_nnp` if both neighbors are proper nouns (entity coordination signal)
+  - `adj_coord_before_n` if pattern is JJ and JJ N (phrase-level coordination)
+  - `quant_in_prev3` if quantifier (CD/DT/PRP$) in previous 3 tokens (list scope)
+- Linguistic features (BIO violation reduction)
+  - `prev_is_symbol` if previous token is $, #, or % (numeric NP context)
+  - `is_determiner` if current token is DT/PDT/WDT/PRP$ (NP starters)
+  - `jj_before_noun` if JJ followed by NN (attributive adjectives)
+  - `more_most_before_np` if more/most before JJ/NN (comparative/superlative NP starters)
 - Sequence tag dependency (MEMM-style)
   - `PrevBIO=@@`
   - `PrevBIO+pos=@@+{pos}` and `PrevBIO+p1pos=@@+{p1pos}`
@@ -116,6 +121,15 @@ Failed Additions:
 - ✗ **comma_in_prev3**: No improvement
   - Comma in previous 3 tokens had slight negative effect
 
+Linguistic Features Ablation (targeting O→I-NP violations):
+- ✗ **is_function_word**: No effect (7844 baseline)
+- ✗ **is_currency_symbol**: No effect (7844 baseline)
+- ✗ **is_unit_noun**: No effect (7844 baseline)
+- ✗ **det_before_np_material**: No real gain (7844), slight precision increase but accuracy decreased
+- ✗ **jj_after_copula**: No effect (7844 baseline)
+- ✗ **generic_adverb**: Hurt performance (7843, -1 from baseline)
+- ✗ **adverb_before_number**: No effect (7844 baseline)
+
 Successful Additions:
 - ✓ **nnp_and_nnp**: +2 correct groups, F1 improved to 93.3% (P: 92.90%, R: 93.60%)
   - Detects proper noun coordination (e.g., "Axa and Hoylake")
@@ -123,6 +137,14 @@ Successful Additions:
   - Detects adjective coordination before noun (e.g., "professional and private lives")
 - ✓ **quant_in_prev3**: +2 correct groups, F1 improved to 93.3% (P: 92.91%, R: 93.60%)
   - Quantifier scope indicator for list NPs (e.g., "86,555 pickups, vans and sport utility vehicles")
+- ✓ **prev_is_symbol**: +1 correct group (7845), F1: 93.29%
+  - Previous token is currency/percent symbol (helps numeric NP boundaries)
+- ✓ **is_determiner**: +1 correct group (7845), F1: 93.29%
+  - Identifies determiners as NP starters
+- ✓ **jj_before_noun**: +2 correct groups (7846), F1: 93.31% ← BEST LINGUISTIC FEATURE
+  - Attributive adjectives before nouns (e.g., "open borders", "high level")
+- ✓ **more_most_before_np**: +1 correct group (7845), F1: 93.29%
+  - Comparative/superlative as NP starters (e.g., "more radical views")
 
 Current Feature Set:
 - Core: w, wl, pos, cpos, shape
@@ -132,19 +154,22 @@ Current Feature Set:
 - Context: ±2 POS, ±1 words, p1wl (NO n1wl, n2cpos)
 - Structural: pnRun
 - Coordination: nnp_and_nnp, adj_coord_before_n, quant_in_prev3
+- Linguistic: prev_is_symbol, is_determiner, jj_before_noun, more_most_before_np
 - MEMM: PrevBIO+p1pos, PrevBIO+pos
 
 Performance:
-- Previous: 93.2% F1 (7840/8378, P: 92.87%, R: 93.58%)
-- Current (with coordination features): Expected ~93.3%+ F1 (individual features showed +1-2 correct groups each)
+- Baseline (before coordination features): 93.2% F1 (7840/8378, P: 92.87%, R: 93.58%)
+- With coordination features: 93.3% F1 (7844 correct groups)
+- With coordination + linguistic features: Expected ~93.3-93.4% F1 (best individual: 7846 correct groups)
 - Target: 95% F1
-- Gap: ~1.7 points
+- Gap: ~1.6-1.7 points
 
 Key Insights:
 1. **Context Asymmetry**: p1wl helps generalize, n1wl hurts (next-word capitalization is informative)
 2. **All base features necessary**: Ablation complete - remaining features all contribute
-3. **Error-driven analysis**: Used find_worst_errors.py to identify actual dev set failures
-   - Top patterns: comma between NNPs (13 errors), "and" coordination (71 errors, split I↔O)
-4. **Pattern-specific features often fail**: Highly specific features (comma_in_nnp_seq) don't improve - likely too narrow or confounded by existing features
+3. **Error-driven analysis**: Used find_worst_errors.py and analyze_bio_violations.py to identify actual dev set failures
+   - Top patterns: comma between NNPs (13 errors), "and" coordination (71 errors, split I↔O), O→I-NP violations (132 violations)
+4. **Pattern-specific features often fail**: Highly specific features (comma_in_nnp_seq, is_currency_symbol) don't improve - likely too narrow or confounded by existing features
 5. **Coordination features work**: Targeted features for 'and' error patterns (NNP coordination, adjective coordination, quantifier scope) each provide small improvements (+1-2 correct groups)
+6. **Linguistic features require careful testing**: 11 features tested, only 4 helped. Function words, currency symbols, and unit nouns showed no improvement despite targeting O→I-NP violations. Best performer: jj_before_noun (+2 correct groups)
 

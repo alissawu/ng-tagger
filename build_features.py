@@ -207,76 +207,25 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     if has_quant:
         feats.append("quant_in_prev3")
 
-    # ===== LINGUISTIC FEATURES (to reduce BIO violations) =====
+    # ===== LINGUISTIC FEATURES (winners from ablation testing) =====
 
-    # LING_FUNC_START
-    # Function words (CC, IN, punctuation) - typically O
-    if pos in {'CC', 'IN'} or wl in {',', ':', ';', '``', "''", '-lrb-', '-rrb-'}:  # LING_FUNC
-        feats.append("is_function_word")  # LING_FUNC
-    # LING_FUNC_END
+    # Previous token is currency/number symbol (for numeric NPs)
+    if p1 is not None and p1[0].lower() in {'$', '#', '%'}:
+        feats.append("prev_is_symbol")
 
-    # LING_CURR_START
-    # Currency/percent symbols and unit nouns (for numeric NPs)
-    if wl in {'$', '#', '%'}:  # LING_CURR
-        feats.append("is_currency_symbol")  # LING_CURR
-    # LING_CURR_END
-
-    # LING_UNIT_START
-    if wl in {'million', 'billion', 'trillion', 'percent', 'cents', 'shares',  # LING_UNIT
-              'year', 'years', 'quarter', 'quarters', 'points', 'results'}:  # LING_UNIT
-        feats.append("is_unit_noun")  # LING_UNIT
-    # LING_UNIT_END
-
-    # LING_PREV_SYM_START
-    # Previous token is currency/number symbol
-    if p1 is not None and p1[0].lower() in {'$', '#', '%'}:  # LING_PREV_SYM
-        feats.append("prev_is_symbol")  # LING_PREV_SYM
-    # LING_PREV_SYM_END
-
-    # LING_DET1_START
     # Determiner/possessive patterns (typically start NPs)
-    if pos in {'DT', 'PDT', 'WDT', 'PRP$'}:  # LING_DET1
-        feats.append("is_determiner")  # LING_DET1
-    # LING_DET1_END
+    if pos in {'DT', 'PDT', 'WDT', 'PRP$'}:
+        feats.append("is_determiner")
 
-    # LING_DET2_START
-        # Determiner followed by noun/adjective
-        if n1 is not None and n1[1] in {'JJ', 'NN', 'NNS', 'NNP', 'NNPS', 'CD'}:  # LING_DET2
-            feats.append("det_before_np_material")  # LING_DET2
-    # LING_DET2_END
+    # Attributive adjectives: JJ before noun (should be inside NP)
+    if pos.startswith('JJ'):
+        if n1 is not None and n1[1].startswith('NN'):
+            feats.append("jj_before_noun")
 
-    # LING_JJ_N_START
-    # Adjective context
-    if pos.startswith('JJ'):  # LING_JJ_N
-        # Attributive: JJ before noun (should be inside NP)
-        if n1 is not None and n1[1].startswith('NN'):  # LING_JJ_N
-            feats.append("jj_before_noun")  # LING_JJ_N
-    # LING_JJ_N_END
-
-    # LING_JJ_COP_START
-        # Predicative: JJ after copula (should be O)
-        if p1 is not None and p1[0].lower() in {'is', 'are', 'was', 'were', 'be', 'been'}:  # LING_JJ_COP
-            feats.append("jj_after_copula")  # LING_JJ_COP
-    # LING_JJ_COP_END
-
-    # LING_MORE_START
     # More/most as NP starters (comparative/superlative)
-    if wl in {'more', 'most'} and pos in {'RBR', 'RBS', 'JJR', 'JJS'}:  # LING_MORE
-        if n1 is not None and (n1[1].startswith('JJ') or n1[1].startswith('NN')):  # LING_MORE
-            feats.append("more_most_before_np")  # LING_MORE
-    # LING_MORE_END
-
-    # LING_ADV_START
-    # Generic adverbs (usually O unless in numeric context)
-    if pos == 'RB' and wl in {'even', 'generally', 'almost', 'nearly', 'about', 'roughly'}:  # LING_ADV
-        feats.append("generic_adverb")  # LING_ADV
-    # LING_ADV_END
-
-    # LING_ADV_NUM_START
-        # Exception: almost/nearly before number
-        if n1 is not None and n1[1] in {'CD', 'JJR'}:  # LING_ADV_NUM
-            feats.append("adverb_before_number")  # LING_ADV_NUM
-    # LING_ADV_NUM_END
+    if wl in {'more', 'most'} and pos in {'RBR', 'RBS', 'JJR', 'JJS'}:
+        if n1 is not None and (n1[1].startswith('JJ') or n1[1].startswith('NN')):
+            feats.append("more_most_before_np")
 
     return feats
 
