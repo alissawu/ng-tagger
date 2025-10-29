@@ -5,6 +5,13 @@ from typing import List, Tuple, Optional
 
 DET_WORDS = {"the","a","an","this","that","these","those"}
 PREP_WORDS = {"of","in","on","at","for","with","by","to","from","as","into","over","under"}
+TEMPORAL_WORDS = {
+    "january","february","march","april","may","june","july","august",
+    "september","october","november","december","monday","tuesday",
+    "wednesday","thursday","friday","saturday","sunday","today",
+    "yesterday","tomorrow","week","month","year","day","morning",
+    "afternoon","evening","night","weekend"
+}
 
 # --- utilities ---------------------------------------------------------------
 
@@ -233,6 +240,45 @@ def token_feats(sent, i, include_prev_bio=True) -> List[str]:
     if wl in {'more', 'most'} and pos in {'RBR', 'RBS', 'JJR', 'JJS'}:
         if n1 is not None and (n1[1].startswith('JJ') or n1[1].startswith('NN')):
             feats.append("more_most_before_np")
+
+    # ===== LINGUISTIC FEATURES (semantic & syntactic knowledge) =====
+
+    # BEGIN_LING_A
+    if p1 is not None and p1[0].lower() in {'and', 'or', '&'} and p2 is not None:
+        p2_is_temporal = p2[0].lower() in TEMPORAL_WORDS or (p2[1] == 'NNP' and p2[0] in {'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','January','February','March','April','May','June','July','August','September','October','November','December'})
+        curr_is_temporal = wl in TEMPORAL_WORDS or (pos == 'NNP' and w in {'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday','January','February','March','April','May','June','July','August','September','October','November','December'})
+        if p2_is_temporal and curr_is_temporal: feats.append("LING_A_temporal_coord")
+        p2_is_measure = p2[1] == 'CD' or p2[0] in {'%','percent','percentage'}
+        curr_is_measure = pos == 'CD' or w in {'%','percent','percentage'}
+        if p2_is_measure and curr_is_measure: feats.append("LING_A_measure_coord")
+    # END_LING_A
+
+    # BEGIN_LING_B
+    if p1 is not None and p1[1] == 'IN':
+        prep = p1[0].lower()
+        if prep == 'of' and pos in {'DT','PDT','WDT','PRP$'}: feats.append("LING_B_of_det_np_internal")
+        if prep == 'as' and pos in {'NN','NNS','NNP','NNPS','DT'}: feats.append("LING_B_as_role")
+        if prep in {'in','on','at'} and (wl in TEMPORAL_WORDS or pos == 'CD'): feats.append("LING_B_temporal_pp")
+    # END_LING_B
+
+    # BEGIN_LING_C
+    if p1 is not None:
+        if p1[0].lower() == 'that' and p1[1] in {'IN','WDT'} and pos in {'DT','PRP','PRP$','NN','NNS','NNP','NNPS','JJ','CD'}: feats.append("LING_C_after_that")
+        if p1[0].lower() in {'which','who','whom','whose'} and p1[1] in {'WDT','WP','WP$'} and pos in {'DT','PRP','PRP$','NN','NNS','NNP','NNPS','JJ','CD','VB','VBD','VBZ','VBP'}: feats.append("LING_C_after_wh")
+    # END_LING_C
+
+    # BEGIN_LING_D
+    det_distance = -1
+    for j in range(max(0, i-5), i):
+        if sent[j][1] in {'DT','PDT','WDT','PRP$'}: det_distance = i - j; break
+    if det_distance > 0:
+        feats.append(f"LING_D_det_dist_{min(det_distance, 5)}")
+        if det_distance >= 3:
+            has_verb_between = False
+            for j in range(max(0, i-det_distance), i):
+                if sent[j][1].startswith('VB') and sent[j][1] not in {'VBN','VBG'}: has_verb_between = True; break
+            if not has_verb_between: feats.append("LING_D_deep_in_np")
+    # END_LING_D
 
     return feats
 
